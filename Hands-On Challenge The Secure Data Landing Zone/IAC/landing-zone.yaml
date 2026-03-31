@@ -37,7 +37,7 @@ Resources:
       CidrBlock: 10.0.10.0/24
       MapPublicIpOnLaunch: true
       Tags: [{Key: Name, Value: Public-Subnet-AZ1}]
-
+  # Note: Only one public subnet is created to minimize attack surface, as data processing occurs in private subnets.
   NatEIP:
     Type: AWS::EC2::EIP
     Properties:
