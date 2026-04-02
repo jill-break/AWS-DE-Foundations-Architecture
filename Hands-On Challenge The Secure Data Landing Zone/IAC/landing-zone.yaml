@@ -68,7 +68,7 @@ Resources:
       CidrBlock: 10.0.2.0/24
       Tags: [{Key: Name, Value: Private-Subnet-AZ2}]
 
-  # --- 2. Routing Logic ---
+ # --- 2. Routing Logic ---
   PublicRouteTable:
     Type: AWS::EC2::RouteTable
     Properties:
@@ -111,9 +111,9 @@ Resources:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       SubnetId: !Ref PrivateSubnetAZ2
-      RouteTableId: !Ref PrivateRouteTable
+      RouteTableId: !Ref PrivateRouteTable     
 
-  # --- 3. Identity & Secrets Management ---
+# --- 3. Identity & Secrets Management ---
   RDSSecret:
     Type: AWS::SecretsManager::Secret
     Properties:
@@ -150,7 +150,7 @@ Resources:
   EC2InstanceProfile:
     Type: AWS::IAM::InstanceProfile
     Properties:
-      Roles: [ !Ref EC2ProcessingRole ]
+      Roles: [ !Ref EC2ProcessingRole ] 
 
   # --- 4. Private Connectivity (Multi-AZ VPC Endpoints) ---
   S3GatewayEndpoint:
@@ -283,8 +283,20 @@ Resources:
           FromPort: 443
           ToPort: 443
           CidrIp: 10.0.0.0/16
-
+          
   # --- 7. Resilience (AWS Backup) ---
+  BackupRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: [ backup.amazonaws.com ] }
+            Action: [ 'sts:AssumeRole' ]
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSBackupServiceRolePolicyForBackup
+
   HealthcareBackupVault:
     Type: AWS::Backup::BackupVault
     Properties:
@@ -307,6 +319,7 @@ Resources:
     Properties:
       BackupPlanId: !Ref DailyBackupPlan
       BackupSelection:
+        IamRoleArn: !GetAtt BackupRole.Arn
         SelectionName: TagBasedSelection
         ListOfTags:
           - ConditionType: STRINGEQUALS
