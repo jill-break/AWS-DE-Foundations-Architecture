@@ -1,0 +1,14 @@
+VPC ID: vpc-00e995395ecdadf02
+CIDR: 10.0.0.0/16
+
+# Public Subnet in AZ1
+Public Subnet ID: subnet-0982cb6521c3b881c
+Public Subnet CIDR: 10.0.1.0/24
+
+# Private Subnets in AZ1
+Private Subnet 1A ID: subnet-0e1b4e3913549ba5c
+Private Subnet 1A CIDR: 10.0.2.0/24
+
+# Private Subnets in AZ2
+Private Subnet 1B ID: subnet-02bbd74182a2450b0
+Private Subnet 1B CIDR: 10.0.3.0/24
