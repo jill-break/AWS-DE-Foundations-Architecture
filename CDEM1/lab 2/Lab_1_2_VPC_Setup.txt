@@ -12,3 +12,30 @@ Private Subnet 1A CIDR: 10.0.2.0/24
 # Private Subnets in AZ2
 Private Subnet 1B ID: subnet-02bbd74182a2450b0
 Private Subnet 1B CIDR: 10.0.3.0/24
+
+# Internet Gateway
+Internet Gateway ID: igw-016f1a6d101b231c2
+
+# Elastic IP for NAT Gateway
+Elastic IP: 100.50.129.50
+Allocation ID: eipalloc-01b105159ff8e693c
+
+# NAT Gateway
+NAT Gateway ID: nat-0aaaa8fb294c66af9
+Elastic IP: 100.50.129.50
+
+# Route Tables
+Public Route Table ID: rtb-0168f81789233dbec
+Private Route Table ID: rtb-05005c410c704071d
+
+# Security Groups -  had to add the "data-" prefix because you can't have security groups with the sg as the starting characters in the name, so I added "data-" to the start of each security group name to avoid that issue.
+data-sg-public-nat: sg-049136696578661e6
+data-sg-private-compute ID: sg-0312a93210d4c9909
+data-sg-private-db ID: sg-0caec7dc95b8b77a9
+
+# VPC Endpoint
+S3 Endpoint ID: vpce-0826598df6834fb29
+DynamoDB Endpoint ID: vpce-082207865acf44b9b
+
+# Secret Manager
+Secrets Manager Endpoint ID: vpce-0f1eceeca0db688ef

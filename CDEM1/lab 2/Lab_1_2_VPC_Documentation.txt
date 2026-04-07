@@ -1,0 +1,116 @@
+=== LAB 1.2: VPC & NETWORK SETUP DOCUMENTATION ===
+Date Created: 07/04/2026
+
+VPC DETAILS:
+├─ VPC Name: data-platform-vpc
+├─ VPC ID: vpc-00e995395ecdadf02
+├─ CIDR Block: 10.0.0.0/16 (65,536 IP addresses)
+└─ Region: us-east-1
+
+SUBNETS:
+├─ PUBLIC SUBNET (for NAT Gateway)
+│ ├─ Name: public-subnet-1a
+│ ├─ ID: subnet-0982cb6521c3b881c
+│ ├─ CIDR: 10.0.1.0/24
+│ ├─ AZ: us-east-1a
+│ └─ Route Table: public-route-table (rtb-0168f81789233dbec)
+│
+├─ PRIVATE SUBNET 1 (for Databases)
+│ ├─ Name: private-subnet-1a
+│ ├─ ID: subnet-0e1b4e3913549ba5c
+│ ├─ CIDR: 10.0.2.0/24
+│ ├─ AZ: us-east-1a
+│ └─ Route Table: private-route-table (rtb-05005c410c704071d)
+│
+└─ PRIVATE SUBNET 2 (for Applications)
+├─ Name: private-subnet-1b
+├─ ID: subnet-02bbd74182a2450b0
+├─ CIDR: 10.0.3.0/24
+├─ AZ: us-east-1b
+└─ Route Table: private-route-table (rtb-05005c410c704071d)
+
+INTERNET CONNECTIVITY:
+├─ Internet Gateway
+│ ├─ Name: data-platform-igw
+│ ├─ ID: igw-016f1a6d101b231c2
+│ └─ Status: Attached
+│
+└─ NAT Gateway
+├─ Name: data-platform-nat
+├─ ID: nat-0aaaa8fb294c66af9
+├─ Elastic IP: 100.50.129.50
+├─ Status: Available
+└─ Cost: $0.32/hour (DELETE when not in use!)
+
+SECURITY GROUPS:
+├─ sg-public-nat
+│ ├─ ID: sg-049136696578661e6
+│ └─ Rules: HTTPS inbound from anywhere
+│
+├─ sg-private-compute
+│ ├─ ID: sg-0312a93210d4c9909
+│ └─ Rules: All traffic from itself + public-nat
+│
+└─ sg-private-db
+├─ ID: sg-0caec7dc95b8b77a9
+└─ Rules: MySQL 3306 + PostgreSQL 5432 from compute
+
+VPC ENDPOINTS:
+├─ S3 Gateway
+│ ├─ ID: vpce-0826598df6834fb29
+│ ├─ Cost: FREE
+│ └─ Associated with: private-route-table
+│
+├─ DynamoDB Gateway
+│ ├─ ID: vpce-082207865acf44b9b
+│ ├─ Cost: FREE
+│ └─ Associated with: private-route-table
+│
+└─ Secrets Manager Interface
+├─ ID: vpce-0f1eceeca0db688ef
+├─ Cost: ~$7/month
+└─ Subnets: private-subnet-1a, private-subnet-1b
+
+ROUTE TABLES:
+├─ Public Route Table (rtb-0168f81789233dbec)
+│ ├─ ID: rtb-[PASTE HERE]
+│ ├─ Routes:
+│ │ ├─ 10.0.0.0/16 → Local
+│ │ └─ 0.0.0.0/0 → Internet Gateway (igw-016f1a6d101b231c2)
+│ └─ Associated Subnets: public-subnet-1a
+│
+└─ Private Route Table (rtb-05005c410c704071d)
+├─ ID: rtb-[PASTE HERE]
+├─ Routes:
+│ ├─ 10.0.0.0/16 → Local
+│ └─ 0.0.0.0/0 → NAT Gateway (nat-016f1a6d101b231c2)
+└─ Associated Subnets: private-subnet-1a, private-subnet-1b
+
+SECURITY ARCHITECTURE:
+├─ Internet → IGW → Public Subnet → NAT → Private Subnets
+├─ Private servers can reach internet for updates (via NAT)
+├─ Internet CANNOT reach private servers directly
+└─ Databases only accessible from application servers
+
+NETWORK TRAFFIC FLOW:
+├─ Inbound: Internet → IGW → Public SG → (no further allowed)
+├─ Outbound (from Private Apps): Apps → NAT → IGW → Internet
+├─ Within VPC: All subnets can reach each other via routes
+└─ VPC Endpoints: Private → S3/DynamoDB without internet
+
+COST BREAKDOWN:
+├─ NAT Gateway: $0.32/hour = $232/month (if left running 24/7)
+├─ Data transfer via NAT: $0.02/GB
+├─ VPC Endpoints (S3, DynamoDB): FREE
+├─ Secrets Manager Endpoint: ~$7/month
+├─ Internet Gateway: FREE
+├─ VPC itself: FREE
+├─ Security Groups: FREE
+├─ Route Tables: FREE
+└─ Total: ~$240/month (if NAT runs 24/7)
+
+NEXT STEPS:
+1. Lab 1.3 will create S3 bucket in this VPC
+2. Future labs will launch RDS in private-subnet-1a
+3. Future labs will launch EC2/Glue in private-subnet-1b
+4. DELETE NAT Gateway when not in use (saves $232/month!)
