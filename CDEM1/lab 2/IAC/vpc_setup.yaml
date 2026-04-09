@@ -1,0 +1,235 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Data Platform VPC and Network Setup (Lab 1.2)
+
+Resources:
+  # VPC & INTERNET GATEWAY
+  DataPlatformVPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true # Required for Interface Endpoints
+      Tags:
+        - Key: Name
+          Value: data-platform-vpc
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: data-platform-igw
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref DataPlatformVPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # SUBNETS
+  PublicSubnet1A:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref DataPlatformVPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ''] # Maps to us-east-1a
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: public-subnet-1a
+
+  PrivateSubnet1A:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref DataPlatformVPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [0, !GetAZs ''] # Maps to us-east-1a
+      Tags:
+        - Key: Name
+          Value: private-subnet-1a
+
+  PrivateSubnet1B:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref DataPlatformVPC
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: !Select [1, !GetAZs ''] # Maps to us-east-1b
+      Tags:
+        - Key: Name
+          Value: private-subnet-1b
+
+  # NAT GATEWAY & ELASTIC IP
+  NatElasticIP:
+    Type: AWS::EC2::EIP
+    DependsOn: AttachGateway
+    Properties:
+      Domain: vpc
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatElasticIP.AllocationId
+      SubnetId: !Ref PublicSubnet1A
+      Tags:
+        - Key: Name
+          Value: data-platform-nat
+
+  # ROUTE TABLES
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref DataPlatformVPC
+      Tags:
+        - Key: Name
+          Value: public-route-table
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1A
+      RouteTableId: !Ref PublicRouteTable
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref DataPlatformVPC
+      Tags:
+        - Key: Name
+          Value: private-route-table
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  PrivateSubnet1ARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1A
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet1BRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1B
+      RouteTableId: !Ref PrivateRouteTable
+
+  # SECURITY GROUPS
+  SgPublicNat:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: data-sg-public-nat
+      GroupDescription: HTTPS inbound from anywhere
+      VpcId: !Ref DataPlatformVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: data-sg-public-nat
+
+  SgPrivateCompute:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: data-sg-private-compute
+      GroupDescription: All traffic from itself and public-nat
+      VpcId: !Ref DataPlatformVPC
+      Tags:
+        - Key: Name
+          Value: data-sg-private-compute
+
+  # Self-referencing rule for Compute SG
+  SgPrivateComputeIngressSelf:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref SgPrivateCompute
+      IpProtocol: -1
+      SourceSecurityGroupId: !Ref SgPrivateCompute
+
+  # Allow from Public NAT SG
+  SgPrivateComputeIngressNat:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref SgPrivateCompute
+      IpProtocol: -1
+      SourceSecurityGroupId: !Ref SgPublicNat
+
+  SgPrivateDb:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: data-sg-private-db
+      GroupDescription: MySQL 3306 and PostgreSQL 5432 from compute
+      VpcId: !Ref DataPlatformVPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref SgPrivateCompute
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref SgPrivateCompute
+      Tags:
+        - Key: Name
+          Value: data-sg-private-db
+
+  # VPC ENDPOINTS
+  S3Endpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref DataPlatformVPC
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.s3"
+      VpcEndpointType: Gateway
+      RouteTableIds:
+        - !Ref PrivateRouteTable
+
+  DynamoDBEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref DataPlatformVPC
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.dynamodb"
+      VpcEndpointType: Gateway
+      RouteTableIds:
+        - !Ref PrivateRouteTable
+
+  SecretsManagerEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref DataPlatformVPC
+      ServiceName: !Sub "com.amazonaws.${AWS::Region}.secretsmanager"
+      VpcEndpointType: Interface
+      PrivateDnsEnabled: true
+      SubnetIds:
+        - !Ref PrivateSubnet1A
+        - !Ref PrivateSubnet1B
+      SecurityGroupIds:
+        - !Ref SgPrivateCompute # Reusing compute SG so apps can communicate with it
+
+Outputs:
+  VpcId:
+    Description: The ID of the VPC
+    Value: !Ref DataPlatformVPC
+    Export:
+      Name: !Sub "${AWS::StackName}-VpcId"
+  PrivateSubnet1A:
+    Description: Private Subnet 1A ID
+    Value: !Ref PrivateSubnet1A
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateSubnet1A"
+  PrivateSubnet1B:
+    Description: Private Subnet 1B ID
+    Value: !Ref PrivateSubnet1B
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateSubnet1B"
