@@ -1,0 +1,153 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: IAM roles and policies for Data Engineering environment
+
+Resources:
+  # CUSTOM POLICIES
+  
+  DataLakeBucketAccessPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: DataLakeBucketAccessPolicy
+      Description: Restrict S3 access to data-lake buckets only and blocks unencrypted uploads
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ListDataLakeBucket
+            Effect: Allow
+            Action:
+              - s3:ListBucket
+              - s3:GetBucketLocation
+            Resource: arn:aws:s3:::data-lake-*
+          - Sid: ReadWriteDataLakeObjects
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:DeleteObject
+            Resource: arn:aws:s3:::data-lake-*/*
+          - Sid: DenyUnencryptedUploads
+            Effect: Deny
+            Action: s3:PutObject
+            Resource: arn:aws:s3:::data-lake-*/*
+            Condition:
+              StringNotEquals:
+                s3:x-amz-server-side-encryption: AES256
+
+  QuickSightReadOnlyAccess:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: QuickSightReadOnlyAccess
+      Description: Allow read-only access to QuickSight for analysts
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: QuickSightReadOnlyAccess
+            Effect: Allow
+            Action:
+              - quicksight:Describe*
+              - quicksight:List*
+              - quicksight:Get*
+            Resource: "*"
+
+  # ROLES
+
+  DataEngineerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: DataEngineerRole
+      Description: Main role for data engineers
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/AWSGlueConsoleFullAccess
+        - arn:aws:iam::aws:policy/AmazonRedshiftFullAccess
+        - arn:aws:iam::aws:policy/AmazonElasticMapReduceFullAccess
+        - arn:aws:iam::aws:policy/AmazonKinesisFullAccess
+        - arn:aws:iam::aws:policy/AWSLambda_FullAccess
+        - arn:aws:iam::aws:policy/CloudWatchFullAccess
+        - !Ref DataLakeBucketAccessPolicy
+
+  GlueServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: GlueServiceRole
+      Description: For Glue jobs to use
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: glue.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSGlueServiceRole
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+        - arn:aws:iam::aws:policy/SecretsManagerReadWrite
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: LambdaExecutionRole
+      Description: For Lambda functions to use
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+        - arn:aws:iam::aws:policy/AmazonKinesisFullAccess
+        - arn:aws:iam::aws:policy/SecretsManagerReadWrite
+
+  RedshiftIAMRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: RedshiftIAMRole
+      Description: For Redshift to access S3
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: redshift.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+        - arn:aws:iam::aws:policy/CloudWatchLogsFullAccess
+
+  AnalystReadOnlyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: AnalystReadOnlyRole
+      Description: For analysts to query data safely
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonRedshiftReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonAthenaFullAccess
+        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+        - !Ref QuickSightReadOnlyAccess
+
+Outputs:
+  DataEngineerRoleArn:
+    Description: ARN of the Data Engineer Role
+    Value: !GetAtt DataEngineerRole.Arn
+  AnalystReadOnlyRoleArn:
+    Description: ARN of the Analyst Read Only Role
+    Value: !GetAtt AnalystReadOnlyRole.Arn
