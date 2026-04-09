@@ -1,0 +1,10 @@
+=== LAB 1.3: S3 DATA LAKE DOCUMENTATION ===
+Date Created: 09/04/2026
+AWS Account ID: 352505432441
+MAIN BUCKET:
+Bucket Name: data-lake-prod-352505432441 
+Bucket ARN: arn:aws:s3:::data-lake-prod-352505432441
+
+LOGGING BUCKET:
+Bucket Name: data-lake-prod-logs-352505432441 
+Bucket ARN: arn:aws:s3:::data-lake-prod-logs-352505432441

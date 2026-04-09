@@ -1,0 +1,6 @@
+customer_id,name,email,country,created_date,purchase_amount
+1,John Doe,john@example.com,US,2024-01-01,150.00
+2,Jane Smith,jane@example.com,UK,2024-01-02,200.50
+3,Bob Johnson,bob@example.com,CA,2024-01-03,75.25
+4,Alice Williams,alice@example.com,AU,2024-01-04,300.00
+5,Charlie Brown,charlie@example.com,US,2024-01-05,125.75
