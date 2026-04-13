@@ -1,0 +1,6 @@
+sale_id,customer_id,amount,sale_date,product_category
+1001,101,1500.00,2024-01-15,Electronics
+1002,102,2300.00,2024-01-16,Software
+1003,103,890.00,2024-01-17,Hardware
+1004,101,750.00,2024-01-18,Services
+1005,104,3200.00,2024-01-19,Enterprise

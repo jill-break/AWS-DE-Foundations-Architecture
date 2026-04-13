@@ -1,0 +1,6 @@
+transaction_id,sale_id,payment_method,status,timestamp
+5001,1001,credit_card,completed,2024-01-15 09:30:00
+5002,1002,bank_transfer,completed,2024-01-16 10:15:00
+5003,1003,credit_card,completed,2024-01-17 14:22:00
+5004,1004,paypal,completed,2024-01-18 16:45:00
+5005,1005,wire_transfer,pending,2024-01-19 11:30:00

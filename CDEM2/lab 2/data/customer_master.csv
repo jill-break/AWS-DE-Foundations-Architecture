@@ -1,0 +1,6 @@
+customer_id,name,email,phone,address,signup_date
+101,Alice Johnson,alice@company.com,555-0101,123 Main St,2024-01-01
+102,Bob Smith,bob@company.com,555-0102,456 Oak Ave,2024-01-05
+103,Carol White,carol@company.com,555-0103,789 Pine Rd,2024-01-10
+104,David Brown,david@company.com,555-0104,321 Elm St,2024-01-15
+105,Eve Davis,eve@company.com,555-0105,654 Maple Dr,2024-01-20
