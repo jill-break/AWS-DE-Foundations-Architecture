@@ -1,0 +1,45 @@
+Phase 1: Environment & Schema Definition
+Before moving data, we must define the "Source of Truth."
+
+Steps:
+Create an S3 Bucket: Create a bucket (e.g., telemetry-lakehouse-primary) with Bucket Versioning enabled to protect against accidental deletes.
+
+Define Glue Data Catalog: Create a database called telemetry_db. Within it, define a table raw_telemetry that matches the JSON structure.
+
+Fields: vehicle_id (string), timestamp (timestamp), latitude (double), longitude (double), speed (double).
+
+Documentation of Decisions:
+Why Glue Catalog? Firehose needs a schema to convert JSON to Parquet. By defining it in Glue, we also make the data immediately queryable by Amazon Athena for the BI team once it lands in S3.
+
+Data Types: I chose double for coordinates and speed to maintain precision for geospatial analysis.
+
+Documentation of Decisions for Phase 1
+Manual Schema vs. Crawler: I am choosing to define this schema manually rather than using a Glue Crawler.
+
+Justification: For a known, static data structure, manual definition is faster and avoids the cost of running a Crawler. It also ensures that data types (like double for speed) are exactly what the BI team expects.
+
+Decoupled Storage: By pointing the Glue table to the S3 bucket before data arrives, we ensure that as soon as Firehose drops the first Parquet file, the data is immediately queryable via Athena.
+
+Verification Check
+Before we move to Phase 2, ensure:
+
+[X] You can see the telemetry_db in Glue.
+
+[X] The raw_telemetry table shows the 5 columns with the correct data types.
+
+[X] Your S3 bucket is empty and ready.
+
+
+Documentation of Decisions for Phase 2
+Direct PUT over Kinesis Data Streams (KDS): Since the requirement is "cheap archiving" and "BI optimization," KDS would add unnecessary cost and complexity (shards, management). Firehose handles the "many producers to one storage" pattern natively and cheaply.
+
+The 128MB Buffer: A Senior Engineer avoids "Small File Syndrome." By buffering to 128MB, we ensure that when the BI team runs a query in Athena, the engine reads a few healthy-sized files rather than thousands of tiny ones, which is significantly faster and cheaper.
+
+Error Prefixing: Never build a pipeline without a "Dead Letter Office." The errors/ prefix ensures that if the telemetry schema changes unexpectedly, we don't just "drop" the data; we store it for reprocessing.
+
+Verification Check
+[X] Does the stream status show as Active?
+
+[X] Is the "Record format conversion" status marked as Enabled?
+
+[X] Does the IAM role created for Firehose have permissions to access both your S3 bucket and the Glue Catalog? (AWS usually generates this for you during setup).
