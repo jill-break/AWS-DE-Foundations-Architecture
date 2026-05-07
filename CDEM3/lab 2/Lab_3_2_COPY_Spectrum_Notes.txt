@@ -1,0 +1,114 @@
+=== LAB 3.2: COPY COMMAND + SPECTRUM ===
+Date Created: 07/05/2026
+AWS Account ID: 352505432441
+
+CLUSTER: redshift-tier3-lab
+Database: analytics
+IAM Role: arn:aws:iam::352505432441:role/RedshiftIAMRole
+S3 Bucket: data-lake-prod-352505432441
+
+DATA FILES UPLOADED (via Terraform → raw/ in data lake):
+├─ customers.csv  — 10 rows  (customer_id, customer_name, country, signup_date, lifetime_value)
+├─ orders.csv     — 15 rows  (order_id, customer_id, product, amount, order_date)
+└─ events.csv     — 100 rows (event_id, user_id, event_type, event_timestamp, session_id, duration_seconds)
+
+TABLES CREATED (via COPY command in Query Editor v2):
+1. customers (COPY)
+   - Rows: 10
+   - Source: s3://data-lake-prod-352505432441/raw/customers.csv
+   - Query time: <1 second
+   - Location: Redshift cluster storage
+
+2. orders (COPY)
+   - Rows: 15
+   - Source: s3://data-lake-prod-352505432441/raw/orders.csv
+   - Query time: <1 second
+   - Location: Redshift cluster storage
+
+3. events (COPY)
+   - Rows: 100
+   - Source: s3://data-lake-prod-352505432441/raw/events.csv
+   - Query time: <1 second
+   - Location: Redshift cluster storage
+
+4. events_external (SPECTRUM)
+   - Rows: 100 (same data as events table)
+   - Load time: 0 seconds (no load — external)
+   - Query time: 1-3 seconds (S3 network latency)
+   - Location: S3 (s3://data-lake-prod-352505432441/raw/events.csv)
+   - Schema: spectrum_events (Glue DB: spectrum_db)
+
+COPY COMMAND EXAMPLE:
+COPY events (event_id, user_id, event_type, event_timestamp, session_id, duration_seconds)
+FROM 's3://data-lake-prod-352505432441/raw/events.csv'
+CREDENTIALS 'aws_iam_role=arn:aws:iam::352505432441:role/RedshiftIAMRole'
+FORMAT CSV
+DELIMITER ','
+IGNOREHEADER 1
+MAXERROR 100;
+
+SPECTRUM EXTERNAL SCHEMA + TABLE:
+CREATE EXTERNAL SCHEMA spectrum_events
+FROM DATA CATALOG
+DATABASE 'spectrum_db'
+REGION 'us-east-1'
+IAM_ROLE 'arn:aws:iam::352505432441:role/RedshiftIAMRole';
+
+CREATE EXTERNAL TABLE spectrum_events.events_external (...)
+STORED AS TEXTFILE
+LOCATION 's3://data-lake-prod-352505432441/raw/events.csv'
+WITH SERDEPROPERTIES ('field.delim' = ',', 'skip.header.line.count' = '1');
+
+PERFORMANCE COMPARISON:
+Operation              | Time   | Cost/Month  | Use When
+COPY load (100 rows)   | <5s    | FREE        | Daily/hourly analysis
+Query COPY data        | <1s    | Included    | Real-time dashboards
+Query Spectrum table   | 1-3s   | $6.25/TB    | Rare historical queries
+Keep in S3 (Spectrum)  | -      | ~$0.01/mo   | Archive, cold storage
+
+COPY tables:
+- Pros: Fast queries (<1s), data in cluster memory
+- Cons: Uses cluster storage, requires load step
+- Best for: Daily/hourly analysis, joins, dashboards
+
+Spectrum tables:
+- Pros: No load time, cheap S3 storage ($0.023/GB/mo)
+- Cons: Slower queries (1-3s), $6.25 per TB scanned
+- Best for: Rare historical queries, large cold datasets
+
+COST ANALYSIS (actual cluster):
+- Cluster: 2 × ra3.xlplus = ~$0.96/hour (~$23/day) — destroy when done
+- Data loaded: 100 rows (negligible)
+- S3 storage: ~1KB × $0.023/GB = effectively $0/month
+- Spectrum query cost: $6.25 per TB scanned (100 rows = $0.00)
+
+DECISION: Use both!
+- COPY for hot data (queried daily)
+- Spectrum for cold data (queried monthly/yearly)
+
+GLUE DATA CATALOG:
+- Database: spectrum_db (created by Terraform)
+- Purpose: Stores metadata for Spectrum external tables
+- Tables are defined in Glue but queried via Redshift Spectrum
+
+INFRASTRUCTURE AS CODE:
+└─ CDEM3/lab 2/
+      ├─ data/
+      │    ├─ customers.csv   — 10 rows of sample customer data
+      │    ├─ orders.csv      — 15 rows of sample order data
+      │    └─ events.csv      — 100 rows of sample event data
+      └─ IAC/
+           ├─ terraform/
+           │    ├─ main.tf      — S3 object uploads + Glue catalog DB
+           │    ├─ variables.tf — aws_region
+           │    └─ outputs.tf   — S3 paths, IAM role ARN, Glue DB name
+           └─ sql/
+                └─ lab_3_2_queries.sql — all DDL + COPY + Spectrum SQL
+
+KEY LEARNINGS:
+- COPY is the fastest way to bulk-load data into Redshift (parallel, compression-aware)
+- Spectrum lets Redshift query S3 directly without loading — zero load time, pay per query
+- Glue Data Catalog is the metadata store Spectrum reads from
+- Use COPY for hot data (daily queries), Spectrum for cold data (rare historical queries)
+- Explicit FORMAT CSV + IGNOREHEADER 1 + MAXERROR prevents silent data errors
+- Column named event_timestamp (not timestamp — SQL reserved keyword)

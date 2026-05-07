@@ -1,0 +1,11 @@
+customer_id,customer_name,country,signup_date,lifetime_value
+1,Alice Johnson,USA,2024-01-01,1500.00
+2,Bob Smith,Canada,2024-01-05,2300.50
+3,Charlie Brown,USA,2024-01-10,890.25
+4,Diana Prince,UK,2024-01-15,3400.00
+5,Eve Wilson,Australia,2024-01-20,1200.75
+6,Frank Miller,Germany,2024-01-25,2100.00
+7,Grace Lee,Singapore,2024-02-01,1900.50
+8,Henry Davis,USA,2024-02-05,3500.25
+9,Ivy Chen,China,2024-02-10,1400.00
+10,Jack Wilson,Canada,2024-02-15,2700.75
