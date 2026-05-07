@@ -1,12 +1,57 @@
 === LAB 2.2: DATASYNC BATCH INGESTION ===
-Date Created: [TODAY]
+Date Created: 07/05/2026
+AWS Account ID: 352505432441
+
 DATASYNC AGENT:
-Agent Name: [TO BE FILLED]
-Agent IP: [TO BE FILLED]
-Source: [TO BE FILLED]
-Destination: [TO BE FILLED]
+Agent Name: N/A (S3-to-S3 transfer — no agent required)
+Agent IP: N/A
+Source: S3 (datasync-source-352505432441)
+Destination: S3 (data-lake-prod-352505432441/raw/)
+
 SYNC TASK:
-Task Name: [TO BE FILLED]
-Schedule: [TO BE FILLED]
-Data Transferred: [TO BE FILLED]
-Status: [TO BE FILLED]
+Task Name: batch-ingest-to-data-lake
+Schedule: cron(0 2 * * ? *) — daily at 2:00 AM UTC
+Data Transferred: customer_master.csv, sales_history.csv, transaction_log.csv
+Status: Active
+
+SOURCE BUCKET:
+├─ Name: datasync-source-352505432441
+├─ Region: us-east-1
+├─ Encryption: SSE-S3 (AES256)
+└─ Public Access: Blocked
+
+DESTINATION:
+├─ Bucket: data-lake-prod-352505432441
+├─ Prefix: /raw
+└─ Region: us-east-1
+
+DATA FILES:
+├─ customer_master.csv   — customer profiles (ID, name, email, phone, address, signup date)
+├─ sales_history.csv     — sales transactions (sale ID, customer ID, amount, date, category)
+└─ transaction_log.csv   — payment records (transaction ID, sale ID, method, status, timestamp)
+
+IAM ROLE:
+├─ Role Name: DataSyncS3Role
+├─ Trust: datasync.amazonaws.com
+├─ Source Permissions: s3:GetObject, s3:ListBucket, s3:GetBucketLocation
+└─ Destination Permissions: s3:PutObject, s3:GetObject, s3:ListBucket,
+                             s3:GetBucketLocation, s3:AbortMultipartUpload,
+                             s3:ListMultipartUploadParts
+
+TASK OPTIONS:
+├─ Overwrite Mode: ALWAYS (overwrite changed files)
+├─ Preserve Deleted Files: REMOVE (delete from destination if removed at source)
+├─ Verify Mode: ONLY_FILES_TRANSFERRED
+├─ Bytes Per Second: Unlimited (-1)
+└─ POSIX Permissions: NONE (S3 does not use POSIX)
+
+BUCKET POLICY NOTES:
+├─ DenyUnencryptedUploads: Enforced for all principals except DataSyncS3Role
+│  (DataSync relies on bucket default encryption, does not send SSE header)
+└─ DenyNonHTTPS: Enforced for all principals
+
+INFRASTRUCTURE AS CODE:
+└─ Terraform: CDEM2/lab 2/IAC/terraform/
+      ├─ main.tf      — all resources (source bucket, IAM role, DataSync locations & task)
+      ├─ variables.tf — aws_region variable
+      └─ outputs.tf   — task ARN, location ARNs, role ARN, source bucket name
