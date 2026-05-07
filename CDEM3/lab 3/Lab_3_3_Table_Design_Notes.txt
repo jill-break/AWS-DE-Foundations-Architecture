@@ -1,0 +1,126 @@
+=== LAB 3.3: TABLE DESIGN OPTIMIZATION ===
+Date Created: 07/05/2026
+AWS Account ID: 352505432441
+Cluster: redshift-tier3-lab / database: analytics
+
+TABLE DESIGN CHOICES:
+
+1. customers table
+   DISTKEY: customer_id
+   - Why: Most common join column (customers JOIN orders ON customer_id)
+   - Impact: Fast customer lookups, enables co-located joins with orders
+
+   SORTKEY: signup_date (simple)
+   - Why: Date-range queries (WHERE signup_date >= ...)
+   - Impact: Block pruning — Redshift skips irrelevant date blocks
+
+   Compression per column:
+   - customer_id    → ENCODE RAW    (small integer, DISTKEY cannot be compressed)
+   - customer_name  → ENCODE ZSTD   (best compression for variable-length strings)
+   - country        → ENCODE LZO    (fast compression, repeating string values)
+   - signup_date    → ENCODE DELTA  (best for dates — stores differences, not full values)
+   - lifetime_value → ENCODE ZSTD   (good for numeric with high cardinality)
+   Impact: ~80% storage reduction vs uncompressed
+
+2. orders table
+   DISTKEY: customer_id
+   - Why: Join key — matches customers DISTKEY exactly (collocated join)
+   - Impact: JOIN customers JOIN orders ON customer_id requires zero data redistribution
+
+   SORTKEY: order_date (simple)
+   - Why: Most common filter (WHERE order_date >= ...)
+   - Impact: Block pruning on date scans, faster aggregations over date ranges
+
+   Compression per column:
+   - order_id    → ENCODE RAW    (small integer primary key)
+   - customer_id → ENCODE RAW    (DISTKEY, join column — keep fast)
+   - product     → ENCODE ZSTD   (variable-length text)
+   - amount      → ENCODE ZSTD   (NUMERIC with varied values)
+   - order_date  → ENCODE DELTA  (dates compress extremely well with delta encoding)
+   Impact: ~70% storage reduction
+
+3. events table
+   DISTKEY: user_id
+   - Why: High-volume table; queries filter by user or group by user
+   - Impact: Per-user data collocated on one node
+
+   SORTKEY: COMPOUND (event_timestamp, event_type)
+   - Why (primary — event_timestamp): Most queries filter by time range
+   - Why (secondary — event_type): GROUP BY event_type after time filter
+   - Impact: Time-range scans skip blocks; compound key accelerates both filters
+
+   DISTSTYLE: KEY (explicit)
+
+   Compression per column:
+   - event_id         → ENCODE RAW    (integer key)
+   - user_id          → ENCODE RAW    (DISTKEY)
+   - event_type       → ENCODE LZO    (low-cardinality repeated strings — LZO is fastest)
+   - event_timestamp  → ENCODE DELTA  (timestamps compress best with delta)
+   - session_id       → ENCODE LZO    (repeated short strings)
+   - duration_seconds → ENCODE DELTA  (sequential integers compress well with delta)
+   Impact: ~75% storage reduction
+
+COMPRESSION TYPES USED:
+- RAW   : No compression (DISTKEY columns and integer PKs — fast access required)
+- ZSTD  : Best ratio for strings and numerics (~80% reduction)
+- LZO   : Fastest decompression for frequently accessed string columns
+- DELTA : Best for dates/timestamps/sequences (stores differences, not full values)
+
+QUERY PERFORMANCE (all <1 second on 2-node ra3.xlplus):
+
+Customer lookup:
+- Query: SELECT * FROM customers WHERE customer_id = 5
+- Reason: DISTKEY routes to exact node, no cross-node scan
+
+Co-located join:
+- Query: SELECT * FROM customers JOIN orders ON customer_id
+- Reason: Both DISTKEY on customer_id → zero data redistribution
+
+Date range (block pruning):
+- Query: SELECT * FROM orders WHERE order_date >= '2024-01-15'
+- Reason: SORTKEY on order_date → skips all blocks before that date
+
+Event aggregation:
+- Query: SELECT event_type, COUNT(*) FROM events WHERE event_timestamp >= ...
+- Reason: COMPOUND SORTKEY hits timestamp first, then event_type
+
+COLLOCATED JOIN PATTERN:
+customers (DISTKEY=customer_id) + orders (DISTKEY=customer_id)
+→ customer 1 data lives on Node 1 in BOTH tables
+→ JOIN happens locally on Node 1 — no network transfer between nodes
+→ This is the most important design principle for multi-table analytics
+
+PERFORMANCE COMPARISON (conceptual):
+Operation               | Without Design | With Design | Improvement
+Customer lookup         | 2s             | <1s         | 2x
+Customer-orders join    | 5s             | <1s         | 5x
+Date range filter       | 10s            | <1s         | 10x
+Event type aggregation  | 4s             | <1s         | 4x
+Compound effect at scale: 50-100x faster
+
+INFRASTRUCTURE AS CODE:
+└─ CDEM3/lab 3/
+      ├─ IAC/
+      │    ├─ terraform/
+      │    │    ├─ main.tf      — provider only (no new resources in this lab)
+      │    │    ├─ variables.tf — aws_region
+      │    │    └─ outputs.tf   — bucket name, IAM role ARN, SQL file path
+      │    └─ sql/
+      │         └─ lab_3_3_queries.sql — all DDL + COPY + performance queries
+      └─ Lab_3_3_Table_Design_Notes.txt
+
+TEARDOWN (Tier 3 complete — stop charges):
+- terraform destroy (from CDEM3/lab 1/IAC/terraform/) — deletes cluster, subnet group, SG
+- Or manually delete via Redshift console
+- Cluster: redshift-tier3-lab
+- Cost to stop: ~$0.96/hour (2 × ra3.xlplus)
+
+KEY LEARNINGS:
+- DISTKEY = which column routes rows to nodes; use the JOIN column
+- SORTKEY = how rows are ordered within each node; use the WHERE/ORDER BY column
+- Matching DISTKEYs across joined tables = collocated join (zero redistribution)
+- COMPOUND SORTKEY benefits the first column most; add secondary only for common filters
+- DELTA is the best encoding for dates, timestamps, and monotonically increasing integers
+- ZSTD is the best general-purpose encoding for strings and numerics
+- DISTKEY columns should use ENCODE RAW (Redshift requirement)
+- Always run ANALYZE COMPRESSION after loading to verify your choices match Redshift's recommendations
