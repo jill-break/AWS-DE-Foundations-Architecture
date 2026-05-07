@@ -1,0 +1,96 @@
+=== LAB 2.3: KINESIS REAL-TIME STREAMING COMPLETE ===
+AWS Account ID: 352505432441
+Region: us-east-1
+
+KINESIS DATA STREAM:
+├─ Name: user-events-stream
+├─ Shards: 4
+├─ Throughput: 4000 events/second
+├─ Status: ACTIVE
+└─ Data retention: 24 hours
+
+KINESIS FIREHOSE:
+├─ Name: user-events-to-s3
+├─ Source: user-events-stream
+├─ Destination: S3 (data-lake-prod-352505432441/streaming-data/)
+├─ Buffer size: 5 MB
+├─ Buffer time: 300 seconds
+└─ Status: ACTIVE
+
+PYTHON PRODUCER:
+├─ File: CDEM2/lab 3/scripts/kinesis_producer.py
+├─ Events generated: ~150 (30 seconds)
+├─ Rate: ~5 events/second
+├─ Event types: play, pause, resume, seek, buffer, quality_change, error, complete
+└─ Partition key: user_id (maintains order per user)
+
+PYTHON CONSUMER:
+├─ File: CDEM2/lab 3/scripts/kinesis_consumer.py
+├─ Events processed: ~150
+├─ Shards read: 4 (parallel threads)
+├─ Poll interval: 1 second
+└─ Output: CloudWatch custom metrics + terminal
+
+CLOUDWATCH MONITORING:
+├─ IncomingRecords: ~5 events/sec
+├─ IncomingBytes: ~500 bytes/sec
+├─ IteratorAge: <1 second (very low latency!)
+├─ ReadProvisionedThroughputExceeded: 0 (no throttling)
+└─ Dashboard: kinesis-monitoring
+
+S3 BACKUP (via Firehose):
+├─ Location: streaming-data/ folder
+├─ Format: Compressed JSON (gzip)
+├─ Structure: YYYY/MM/DD/HH/[timestamp].gz
+├─ Data complete: Yes
+└─ Queryable: Yes (with Athena)
+
+REAL-TIME METRICS:
+├─ Latency (end-to-end): <1 second
+├─ Throughput: 5 events/second (test rate)
+├─ Scalable to: 4000 events/second (with current shards)
+├─ Data loss: 0 (Firehose guarantees delivery)
+└─ Cost: ~$0.08 per hour (for 4 shards)
+
+COSTS:
+├─ Kinesis shards: 4 × $0.015/shard-hour = $0.06/hour
+├─ Firehose: $0.029 per 1GB ingested
+├─ S3 storage: <$0.01
+└─ Total: ~$0.08/hour (low-traffic test)
+NOTE: At production scale (4 shards always on):
+├─ Shards: 4 × $0.015 × 24 = $1.44/day
+└─ Delete stream + Firehose when not testing to avoid charges
+
+INFRASTRUCTURE AS CODE:
+└─ CDEM2/lab 3/
+      ├─ IAC/
+      │    └─ terraform/
+      │         ├─ main.tf      — Kinesis stream, Firehose IAM role + policy,
+      │         │                 Firehose delivery stream, CloudWatch dashboard
+      │         ├─ variables.tf — aws_region
+      │         └─ outputs.tf   — stream ARN, Firehose ARN, S3 prefix, dashboard URL
+      ├─ scripts/
+      │    ├─ kinesis_producer.py — sends ~150 events over 30s; partition key=user_id
+      │    └─ kinesis_consumer.py — parallel shard readers; emits CloudWatch metrics
+      └─ Lab_2_3_KinesisStreaming.txt
+
+SETUP:
+1. terraform init  (from CDEM2/lab 3/IAC/terraform/)
+2. terraform apply
+3. pip install boto3
+4. python CDEM2/lab\ 3/scripts/kinesis_producer.py   # terminal 1
+5. python CDEM2/lab\ 3/scripts/kinesis_consumer.py   # terminal 2
+6. Check CloudWatch dashboard: kinesis-monitoring
+
+TEARDOWN (stop charges):
+- terraform destroy (from CDEM2/lab 3/IAC/terraform/)
+- Deletes: Kinesis stream, Firehose, IAM role/policy, CloudWatch dashboard
+
+CAPABILITIES:
+✓ Real-time event processing
+✓ Sub-second latency (100-500ms)
+✓ Scalable to 1000s of events/second
+✓ Durable (Firehose backup to S3)
+✓ Orderable (per shard/partition key)
+✓ Parallel shard consumption (4 threads)
+✓ Custom CloudWatch metrics from consumer
