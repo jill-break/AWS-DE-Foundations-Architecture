@@ -1,9 +1,61 @@
+# ── Terraform ──────────────────────────────────────────────────────────────────
+# State files — contain resource IDs, ARNs, and potentially sensitive values
+terraform.tfstate
+terraform.tfstate.backup
 
+# Provider binaries downloaded by terraform init (large, OS-specific)
+**/.terraform/
+
+# Variable files that may contain secrets
+*.tfvars
+*.tfvars.json
+# Keep example/template tfvars
+!*.tfvars.example
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Override files (local developer overrides)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# ── Python ─────────────────────────────────────────────────────────────────────
+CDEM2/Hands-On Challenge/venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# ── Secrets / credentials ──────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials
+secrets.yaml
+secrets.yml
+
+# ── OS / editor noise ──────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/settings.json
+*.swp
+*.swo
+
+# ── Lab-specific exclusions (original) ────────────────────────────────────────
 CDEM1/Hands-On Challenge The Secure Data Landing Zone/IAC/aa.yml
-CDEM1/Hands-On Challenge The Secure Data Landing Zone/Assessment Report.md
 CDEM1/lab 1/module.md
 CDEM1/lab 1/set.txt
-CDEM1/lab 1/Module 1.1.pdf
-CDEM1/lab 2/Module 1.2.pdf
 CDEM1/lab 2/module 2.md
-CDEM2/Hands-On Challenge/venv
+
+# ── PDFs (large course material, not source code) ─────────────────────────────
+*.pdf
