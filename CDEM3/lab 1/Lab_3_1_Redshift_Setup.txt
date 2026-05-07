@@ -1,0 +1,60 @@
+=== LAB 3.1: REDSHIFT CLUSTER SETUP ===
+Date Created: 07/05/2026
+AWS Account ID: 352505432441
+
+CLUSTER INFORMATION:
+Cluster Name: redshift-tier3-lab
+Endpoint: [COPY FROM CLUSTER DETAILS AFTER APPLY]
+Port: 5439
+Database: analytics
+Master Username: awsadmin
+Master Password: Managed by AWS Secrets Manager (manage_master_password = true)
+
+NODE CONFIGURATION:
+- Node Type: ra3.xlplus (dc2.large retired in new accounts)
+- Number of Nodes: 2
+- Total Cost: ~$0.96/hour (~$23/day) — destroy when done
+
+NETWORK CONFIGURATION:
+- VPC: vpc-016a46803312b4334 (data-platform-vpc, from Lab 1.2)
+- Subnet Group: redshift-tier3-subnet-group
+- Private Subnets: private-subnet-1a (10.0.2.0/24), private-subnet-1b (10.0.3.0/24)
+- Security Group: redshift-security-group
+- Inbound: Port 5439 from your IP only (196.61.35.158/32)
+- Publicly Accessible: No
+
+SECURITY CONFIGURATION:
+- Encryption: Enabled (aws/redshift KMS — alias/aws/redshift)
+- KMS Key ID: 42e4c9a1-3ffd-43b1-9e2e-0ae1d74fde73
+- Master Password: Stored in AWS Secrets Manager (ARN: [COPY FROM OUTPUTS])
+- IAM Role: RedshiftIAMRole (arn:aws:iam::352505432441:role/RedshiftIAMRole)
+- S3 Access: Configured for COPY commands via RedshiftIAMRole
+
+CLOUDWATCH LOGS:
+- UserLog: Enabled
+- ConnectionLog: Enabled
+- UseractivityLog: Enabled
+- Log Destination: CloudWatch (aws_redshift_logging resource)
+
+BACKUP:
+- Retention Period: 2 days
+- Automated Backups: Enabled
+
+TAGS:
+- Name: redshift-tier3-lab
+- Environment: Learning
+- Purpose: Analytics
+- Tier: 3
+- Lab: 3.1
+
+INFRASTRUCTURE AS CODE:
+└─ Terraform: CDEM3/lab 1/IAC/terraform/
+      ├─ main.tf      — VPC lookup, KMS, IAM, security group, subnet group, cluster, logging
+      ├─ variables.tf — aws_region, your_ip
+      └─ outputs.tf   — cluster endpoint, identifier, database, port, ARN, secret ARN
+
+NOTES:
+- SLR (AWSServiceRoleForRedshift) already existed in the account — not managed by Terraform
+- VPC ID hardcoded (vpc-016a46803312b4334) to avoid ambiguity with a duplicate VPC in the account
+- Logging uses separate aws_redshift_logging resource (inline logging block deprecated in AWS provider v5)
+- destroy with: terraform destroy
