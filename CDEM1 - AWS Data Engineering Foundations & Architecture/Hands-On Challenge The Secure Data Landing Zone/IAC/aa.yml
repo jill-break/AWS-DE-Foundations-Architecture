@@ -1,0 +1,209 @@
+
+
+  # --- 3. Identity & Secrets Management ---
+  RDSSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: /healthcare/rds/admin
+      Description: Generated credentials for the healthcare database
+      GenerateSecretString:
+        SecretStringTemplate: '{"username": "dbadmin"}'
+        GenerateStringKey: "password"
+        PasswordLength: 16
+        ExcludeCharacters: '"@/\'
+
+  EC2ProcessingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: { Service: [ ec2.amazonaws.com ] }
+            Action: [ 'sts:AssumeRole' ]
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: S3ScopedAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: ['s3:GetObject', 's3:PutObject', 's3:ListBucket']
+                Resource: 
+                  - !GetAtt RawDataBucket.Arn
+                  - !Sub '${RawDataBucket.Arn}/*'
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles: [ !Ref EC2ProcessingRole ]
+
+  # --- 4. Private Connectivity (Multi-AZ VPC Endpoints) ---
+  S3GatewayEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.s3'
+      VpcEndpointType: Gateway
+      RouteTableIds: [ !Ref PrivateRouteTable ]
+
+  SSMInterface:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ssm'
+      VpcEndpointType: Interface
+      SubnetIds: [ !Ref PrivateSubnetAZ1, !Ref PrivateSubnetAZ2 ]
+      SecurityGroupIds: [ !Ref EndpointSecurityGroup ]
+
+  SSMMessagesInterface:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ssmmessages'
+      VpcEndpointType: Interface
+      SubnetIds: [ !Ref PrivateSubnetAZ1, !Ref PrivateSubnetAZ2 ]
+      SecurityGroupIds: [ !Ref EndpointSecurityGroup ]
+
+  EC2MessagesInterface:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcId: !Ref VPC
+      ServiceName: !Sub 'com.amazonaws.${AWS::Region}.ec2messages'
+      VpcEndpointType: Interface
+      SubnetIds: [ !Ref PrivateSubnetAZ1, !Ref PrivateSubnetAZ2 ]
+      SecurityGroupIds: [ !Ref EndpointSecurityGroup ]
+
+  # --- 5. Storage, Database, & Compute ---
+  RawDataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Backup-Policy
+          Value: Healthcare-Daily
+
+  RawDataBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref RawDataBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource: 
+              - !Sub '${RawDataBucket.Arn}'
+              - !Sub '${RawDataBucket.Arn}/*'
+            Condition:
+              StringNotEquals:
+                'aws:sourceVpce': !Ref S3GatewayEndpoint
+
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Private subnets for RDS Multi-AZ
+      SubnetIds: [ !Ref PrivateSubnetAZ1, !Ref PrivateSubnetAZ2 ]
+
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      Engine: postgres
+      DBInstanceClass: db.t3.micro
+      AllocatedStorage: '20'
+      MultiAZ: true
+      MasterUsername: !Join ['', ["{{resolve:secretsmanager:", !Ref RDSSecret, ":SecretString:username}}"]]
+      MasterUserPassword: !Join ['', ["{{resolve:secretsmanager:", !Ref RDSSecret, ":SecretString:password}}"]]
+      VPCSecurityGroups: [ !Ref RDSSecurityGroup ]
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      StorageEncrypted: true
+      PubliclyAccessible: false
+      Tags:
+        - Key: Backup-Policy
+          Value: Healthcare-Daily
+
+  EC2ProcessingNode:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t3.micro
+      ImageId: !Ref LatestAmiId
+      SubnetId: !Ref PrivateSubnetAZ1
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      SecurityGroupIds: [ !Ref EC2SecurityGroup ]
+      Tags: [{Key: Name, Value: Healthcare-Processing-Node}]
+
+  # --- 6. Security Groups (Micro-segmentation) ---
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for the processing node
+      VpcId: !Ref VPC
+
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow inbound from EC2 only
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref EC2SecurityGroup
+
+  EndpointSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow VPC CIDR to Interface Endpoints
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 10.0.0.0/16
+
+  # --- 7. Resilience (AWS Backup) ---
+  HealthcareBackupVault:
+    Type: AWS::Backup::BackupVault
+    Properties:
+      BackupVaultName: HealthcareVault
+
+  DailyBackupPlan:
+    Type: AWS::Backup::BackupPlan
+    Properties:
+      BackupPlan:
+        BackupPlanName: HealthcareDailyBackup
+        BackupPlanRule:
+          - RuleName: DailyRetentionRule
+            TargetBackupVault: !Ref HealthcareBackupVault
+            ScheduleExpression: "cron(0 5 * * ? *)"
+            Lifecycle:
+              DeleteAfterDays: 30
+
+  BackupSelection:
+    Type: AWS::Backup::BackupSelection
+    Properties:
+      BackupPlanId: !Ref DailyBackupPlan
+      BackupSelection:
+        SelectionName: TagBasedSelection
+        ListOfTags:
+          - ConditionType: STRINGEQUALS
+            ConditionKey: "Backup-Policy"
+            ConditionValue: "Healthcare-Daily"
+
+
+
+Outputs:
+  BucketName:
+    Value: !Ref RawDataBucket
+  VpcId:
+    Value: !Ref VPC

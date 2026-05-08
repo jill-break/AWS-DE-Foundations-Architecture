@@ -1,0 +1,169 @@
+Perfect! Let’s add your **QuickSight read-only custom policy** to the documentation so it’s fully complete. I’ll include it under **CUSTOM POLICIES** along with `DataLakeBucketAccessPolicy`.
+
+---
+
+# === LAB 1.1: IAM SETUP DOCUMENTATION ===
+
+**Date Created:** 31/03/2026
+**AWS Account ID:** 352505432441
+
+---
+
+## 🔐 ROLES CREATED:
+
+### 1. DataEngineerRole
+
+**Who:** You (the data engineer building pipelines)
+**Purpose:** Your daily work role, requiring broad access to build and manage data platforms
+**Permissions:** S3, Glue, Redshift, EMR, Kinesis, Lambda, CloudWatch
+**When used:** Your daily work role
+**ARN:**
+
+```
+arn:aws:iam::352505432441:role/DataEngineerRole
+```
+
+---
+
+### 2. GlueServiceRole
+
+**Purpose:** For Glue jobs to use
+**Permissions:** S3, CloudWatch Logs, Secrets Manager
+**When used:** When Glue jobs run
+**ARN:**
+
+```
+arn:aws:iam::352505432441:role/GlueServiceRole
+```
+
+---
+
+### 3. LambdaExecutionRole
+
+**Purpose:** For Lambda functions to use
+**Permissions:** S3, DynamoDB, Kinesis, CloudWatch Logs, Secrets Manager
+**When used:** When Lambda code executes
+**ARN:**
+
+```
+arn:aws:iam::352505432441:role/LambdaExecutionRole
+```
+
+---
+
+### 4. RedshiftIAMRole
+
+**Purpose:** For Redshift to access S3
+**Permissions:** S3, CloudWatch Logs
+**When used:** When Redshift runs COPY commands
+**ARN:**
+
+```
+arn:aws:iam::352505432441:role/RedshiftIAMRole
+```
+
+---
+
+### 5. AnalystReadOnlyRole
+
+**Purpose:** For analysts to query data safely
+**Permissions:**
+
+* Redshift (read-only)
+* Athena
+* QuickSight (read-only via custom policy)
+* S3 (read-only)
+
+**When used:** Analyst queries and dashboards
+**ARN:**
+
+```
+arn:aws:iam::352505432441:role/AnalystReadOnlyRole
+```
+
+---
+
+## 📜 CUSTOM POLICIES:
+
+### 1. DataLakeBucketAccessPolicy
+
+**Purpose:** Restrict S3 access to data-lake buckets only
+
+**Special Features:**
+
+* Allows access **only to specific data lake buckets**
+* Enforces **server-side encryption (SSE-S3 or SSE-KMS)**
+* Denies uploads without encryption
+* Prevents accidental data exposure
+
+**Policy JSON:**
+
+```json
+{
+"Version": "2012-10-17",
+"Statement": [
+{
+"Sid": "ListDataLakeBucket",
+"Effect": "Allow",
+"Action": [
+"s3:ListBucket",
+"s3:GetBucketLocation"
+],
+"Resource": "arn:aws:s3:::data-lake-*"
+},
+{
+"Sid": "ReadWriteDataLakeObjects",
+"Effect": "Allow",
+"Action": [
+"s3:GetObject",
+"s3:PutObject",
+"s3:DeleteObject"
+],
+"Resource": "arn:aws:s3:::data-lake-*/*"
+},
+{
+"Sid": "DenyUnencryptedUploads",
+"Effect": "Deny",
+"Action": "s3:PutObject",
+"Resource": "arn:aws:s3:::data-lake-*/*",
+"Condition": {
+"StringNotEquals": {
+"s3:x-amz-server-side-encryption": "AES256"
+}
+}
+}
+]
+}
+```
+
+---
+
+### 2. QuickSightReadOnlyAccess-Custom
+
+**Purpose:** Allow analysts to view QuickSight dashboards, analyses, and datasets without modifying anything
+
+**Special Features:**
+
+* Read-only for QuickSight
+* Lists and describes resources
+* Can be attached to `AnalystReadOnlyRole`
+
+**Policy JSON:**
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "QuickSightReadOnlyAccess",
+      "Effect": "Allow",
+      "Action": [
+        "quicksight:Describe*",
+        "quicksight:List*",
+        "quicksight:Get*"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
